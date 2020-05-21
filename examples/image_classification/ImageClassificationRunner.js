@@ -14,6 +14,18 @@ class ImageClassificationRunner extends BaseRunner {
     console.log(`labels: ${this._labels}`);
   };
 
+  _getInputTensorTypedArray = () => {
+    let typedArray = this._currentModelInfo.isQuantized || false ? Uint8Array : Float32Array;
+    if (this._currentModelInfo.isDNNL) typedArray = Int8Array;
+    return typedArray;
+  };
+
+  _getOutputTensorTypedArray = () => {
+    let typedArray = this._currentModelInfo.isQuantized || false ? Uint8Array : Float32Array;
+    if (this._currentModelInfo.isDNNL) typedArray = Int8Array;
+    return typedArray;
+  };
+
   _getOtherResources = async () => {
     await this._getLabels(this._currentModelInfo.labelsFile);
   };

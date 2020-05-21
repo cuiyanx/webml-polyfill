@@ -143,6 +143,21 @@ class BaseRunner {
           rawModel._rawFormat = 'OPENVINO';
           status = 'SUCCESS';
           break;
+          case 'pb':
+            const weightFile = url.replace(/predict/, 'init');
+            const weightBuffer = await this._loadURL(weightFile, this._progressHandler, true);
+            const weightBytes = new Uint8Array(weightBuffer);
+            const netBuffer = bytes;
+            const weightMessage = protobuf.roots["caffe2"].caffe2.NetDef.decode(weightBytes);
+            const netMessage = protobuf.roots["caffe2"].caffe2.NetDef.decode(netBuffer);
+            const caffe2Utils = new Caffe2ModelUtils(netMessage,
+                                                     weightMessage,
+                                                     this._currentModelInfo.isQuantized,
+                                                     this._currentModelInfo.isDNNL);
+            rawModel = [...caffe2Utils.getCaffe2Model()];
+            rawModel._rawFormat = 'CAFFE2';
+            status = 'SUCCESS';
+            break;
         default:
           throw new Error(`Unrecognized model format, support TFLite | ONNX | OpenVINO model`);
       }
@@ -231,6 +246,9 @@ class BaseRunner {
       backend: this._currentBackend,
       prefer: this._currentPrefer,
       softmax: postOptions.softmax || false,
+      isQuantized: this._currentModelInfo.isQuantized || false,
+      isDNNL: this._currentModelInfo.isDNNL || false,
+      inputSize: this._currentModelInfo.inputSize || [224, 224, 3]
     };
 
     let model = null;
@@ -244,6 +262,9 @@ class BaseRunner {
         break;
       case 'OPENVINO':
         model = new OpenVINOModelImporter(configs);
+        break;
+      case 'CAFFE2':
+        model = new Caffe2ModelImporter(configs);
         break;
       default:
         throw new Error(`Unsupported '${rawModel._rawFormat}' input.`);
@@ -284,9 +305,41 @@ class BaseRunner {
     } else {
       getTensorArray(src, this._inputTensor, options);
     }
+    console.log(this._inputTensor);  // delete
+    this._initOutputTensor();  // delete
 
     const start = performance.now();
     status = await this._model.compute(this._inputTensor, this._outputTensor);
+
+    console.log(this._outputTensor);  // delete
+
+    if (this._currentModelInfo.isDNNL) {
+      let output = Array.from(this._outputTensor);
+      let outputTmp = [];
+      let expSum = 0;
+      let maxNum = 0;
+
+      for (let i = 0; i < output[0].length; i++) {
+        maxNum = Math.max(maxNum, output[0][i]);
+      }
+      console.log(maxNum);
+
+      for (let i = 0; i < output[0].length; i++) {
+        expSum = expSum + Math.exp((output[0][i] - maxNum));
+      }
+      console.log(expSum);
+
+      for (let i = 0; i < output[0].length; i++) {
+        let tmpNum = (Math.exp(output[0][i] - maxNum) / expSum).toFixed(4);
+        outputTmp.push(tmpNum);
+      }
+
+      console.log(output);
+      this._outputTensor = [new Float32Array(outputTmp)];
+    }
+    console.log(this._outputTensor);  // delete
+
+
     const delta = performance.now() - start;
     this._setInferenceTime(delta);
     console.log(`Computed Status: [${status}]`);
