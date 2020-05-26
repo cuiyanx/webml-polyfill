@@ -21,6 +21,22 @@ const modelZoo = {
     intro: 'An efficient Convolutional Neural Networks for Mobile Vision Applications.',
     paperUrl: 'https://arxiv.org/pdf/1704.04861.pdf'
   }, {
+    modelName: 'Squeezenet (Caffe2)',
+    format: 'Caffe2',
+    modelId: 'Squeezenet_Caffe2',
+    modelSize: '6.2MB',
+    inputSize: [224, 224, 3],
+    outputSize: 1001,
+    modelFile: '../image_classification/model/squeezenet_predict.pb',
+    labelsFile: '../image_classification/model/labels1000.txt',
+    preOptions: {
+      mean: [104, 117, 123],
+      std: [1, 1, 1],
+      channelScheme: 'BGR',
+    },
+    intro: 'An efficient Convolutional Neural Networks for Mobile Vision Applications.',
+    paperUrl: 'https://arxiv.org/pdf/1704.04861.pdf'
+  }, {
     modelName: 'MobileNet v1 (TFLite)',
     format: 'TFLite',
     modelId: 'mobilenet_v1_tflite',

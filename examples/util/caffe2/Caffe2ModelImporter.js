@@ -252,7 +252,7 @@ class Caffe2ModelImporter {
 
           // Pad
           let pads = this._getAttributeValue(args, "pads");
-          let [paddingLeft, paddingRight, paddingTop, paddingBottom] = pads;
+          let [paddingTop, paddingLeft, paddingBottom, paddingRight] = pads;
           console.log(`  pads: [${pads}]`);
 
           // Stride
@@ -351,8 +351,8 @@ class Caffe2ModelImporter {
           let outputTypeCode = inputTypeCode;
           let outputDims = [
             inputDime[0],
-            Math.floor((inputDime[1] - kernelHeight + paddingLeft + paddingTop) / strideHeight + 1),
-            Math.floor((inputDime[2] - kernelWidth + paddingRight + paddingBottom) / strideWidth + 1),
+            Math.floor((inputDime[1] - kernelHeight + paddingTop +paddingBottom) / strideHeight + 1),
+            Math.floor((inputDime[2] - kernelWidth + paddingRight + paddingLeft) / strideWidth + 1),
             biasDims[0]
           ];
           let outputType = [];
