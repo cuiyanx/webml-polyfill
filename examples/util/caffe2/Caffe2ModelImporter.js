@@ -87,7 +87,7 @@ class Caffe2ModelImporter {
       inputType = {
         type: this._nn.TENSOR_QUANT8_ASYMM_SIGNED,
         dimensions: inputDims,
-        scale: this._isDNNL ? 1 : this._rawModel[0].arg["X_scale"]["value"],
+        scale: this._rawModel[0].arg["X_scale"]["value"],
         zeroPoint: this._isDNNL ? 0 : this._rawModel[0].arg["X_zero_point"]["value"]
       };
     }
@@ -257,7 +257,7 @@ class Caffe2ModelImporter {
 
           // Stride
           let strides = this._getAttributeValue(args, "strides");
-          let [strideWidth, strideHeight] = strides;
+          let [strideHeight, strideWidth] = strides;
           console.log(`  strides: [${strides}]`);
 
           // Group
@@ -409,12 +409,12 @@ class Caffe2ModelImporter {
           if (args.hasOwnProperty("pads")) {
             pads = this._getAttributeValue(args, "pads");
           }
-          let [paddingLeft, paddingRight, paddingTop, paddingBottom] = pads;
+          let [paddingTop, paddingLeft, paddingBottom, paddingRight] = pads;
           console.log(`  pads: [${pads}]`);
 
           // Stride
           let strides = this._getAttributeValue(args, "strides");
-          let [strideWidth, strideHeight] = strides;
+          let [strideHeight, strideWidth] = strides;
           console.log(`  strides: [${strides}]`);
 
           // Filter
@@ -433,6 +433,7 @@ class Caffe2ModelImporter {
             console.log(`  bound: [${boundMax}, ${boundMin}]`);
           }
           let fuseCode = this._getFuseCode(boundMax, boundMin);
+          console.log(`  fuseCode: ${fuseCode}`);
 
           inputs.push(this._getTensorIdByName(inputName));
           inputs.push(this._addArgInt32([paddingLeft]));
@@ -451,8 +452,8 @@ class Caffe2ModelImporter {
           let outputTypeCode = inputTypeCode;
           let outputDims = [
             inputDime[0],
-            Math.floor((inputDime[1] - filterHeight + paddingLeft + paddingTop) / strideHeight + 1),
-            Math.floor((inputDime[2] - filterWidth + paddingRight + paddingBottom) / strideWidth + 1),
+            Math.floor((inputDime[1] - filterHeight + paddingBottom + paddingTop) / strideHeight + 1),
+            Math.floor((inputDime[2] - filterWidth + paddingRight + paddingLeft) / strideWidth + 1),
             inputDime[3]
           ];
           let outputType = [];
