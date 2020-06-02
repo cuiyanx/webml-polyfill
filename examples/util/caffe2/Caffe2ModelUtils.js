@@ -4,10 +4,10 @@ class Caffe2ModelUtils {
     this._init = initModel;
     this._quantized = isQuantized;
     this._isDNNL = isDNNL;
-    this._predictDataFormat = false;    // NCHW to NHWC
-    this._initDataFormat = false;       // NCHW to NHWC
+    this._inputName = "";
+    this._dataFormat = false;       // NCHW to NHWC
 
-    this._checkDataFormat();
+    this._initUtils();
     this._initMap = this._initModelHandler();
     this._predictMap = this._predictModelHandler();
   }
@@ -21,40 +21,25 @@ class Caffe2ModelUtils {
   }
 
   _initModelHandler () {
+    console.log(this._init);  // For debug
     let initTensorMap = [];
 
     for (let opIdx in this._init.op) {
       initTensorMap[opIdx] = [];
       let op = this._init.op[opIdx];
-      initTensorMap[opIdx][op.output] = [];
+      initTensorMap[opIdx][op.output[0]] = [];
 
-      for (let argIdx in op.arg) {
-        let arg = op.arg[argIdx];
-        initTensorMap[opIdx][op.output][arg.name] = [];
-        let data = this._checkArgData(arg);
-        initTensorMap[opIdx][op.output][arg.name]["type"] = data.type;
-        initTensorMap[opIdx][op.output][arg.name]["value"] = data.value;
-      }
-
-      // uint8 => int8
-      if (this._quantized && this._isDNNL &&
-          typeof initTensorMap[opIdx][op.output]["values"] != "undefined" &&
-          initTensorMap[opIdx][op.output]["values"]["type"] == "uint8" &&
-          typeof initTensorMap[opIdx][op.output]["Y_zero_point"] != "undefined" &&
-          initTensorMap[opIdx][op.output]["Y_zero_point"]["value"] == "128") {
-        initTensorMap[opIdx][op.output]["values"]["type"] = "int8";
-        let tmpArray = [];
-        for ( let val of Object.values(initTensorMap[opIdx][op.output]["values"]["value"])) {
-          tmpArray.push(val - 128);
+      if (op.output[0] != this._inputName) {
+        for (let argIdx in op.arg) {
+          let arg = op.arg[argIdx];
+          initTensorMap[opIdx][op.output[0]][arg.name] = [];
+          let data = this._checkArgData(arg);
+          initTensorMap[opIdx][op.output[0]][arg.name]["type"] = data.type;
+          initTensorMap[opIdx][op.output[0]][arg.name]["value"] = data.value;
         }
-        initTensorMap[opIdx][op.output]["values"]["value"] = tmpArray;
-        initTensorMap[opIdx][op.output]["Y_zero_point"]["value"] = "0";
-      }
 
-      // Data handle
-      if (typeof initTensorMap[opIdx][op.output]["shape"] != "undefined" &&
-          typeof initTensorMap[opIdx][op.output]["values"] != "undefined") {
-        initTensorMap[opIdx][op.output] = this._DataHandleforTensor(initTensorMap[opIdx][op.output]);
+        // Data handle
+        initTensorMap[opIdx][op.output[0]] = this._DataHandleforTensor(initTensorMap[opIdx][op.output[0]]);
       }
     }
 
@@ -62,6 +47,7 @@ class Caffe2ModelUtils {
   }
 
   _predictModelHandler() {
+    console.log(this._predict);  // For debug
     let predictTensorMap = [];
 
     for (let opIdx in this._predict.op) {
@@ -107,6 +93,7 @@ class Caffe2ModelUtils {
         predictTensorMap[opIdx]["arg"][arg.name]["type"] = data.type;
         predictTensorMap[opIdx]["arg"][arg.name]["value"] = data.value;
 
+        // Data handle
         if (arg.name == "order") {
           predictTensorMap[opIdx]["arg"][arg.name]["type"] = "str";
           let orderTmp = [];
@@ -114,12 +101,7 @@ class Caffe2ModelUtils {
             orderTmp.push(String.fromCharCode(val));
           }
           predictTensorMap[opIdx]["arg"][arg.name]["value"] = orderTmp.join("");
-        }
-
-        // Data handle
-        if (arg.name != "order" &&
-            typeof predictTensorMap[opIdx]["arg"][arg.name]["type"] != "undefined" &&
-            typeof predictTensorMap[opIdx]["arg"][arg.name]["value"] != "undefined") {
+        } else {
           predictTensorMap[opIdx]["arg"][arg.name] = this._DataHandleforArg(predictTensorMap[opIdx]["arg"][arg.name]);
         }
       }
@@ -128,34 +110,18 @@ class Caffe2ModelUtils {
     return predictTensorMap;
   }
 
-  _checkDataFormat() {
-    this._checkInitDataFormat();
-    this._checkpredictDataFormat();
-    // console.log("initDataFormat: " + this._initDataFormat);
-    // console.log("_predictDataFormat: " + this._predictDataFormat);
-  }
+  _initUtils() {
+    this._inputName = this._predict.externalInput[0];
 
-  _checkInitDataFormat() {
-    for (let op of this._init.op) {
-      for (let arg of op.arg) {
-        if (arg.name == "order") {
-          let data = this._checkArgData(arg);
-          let orderTmp = [];
-          for (let val of data.value) {
-            orderTmp.push(String.fromCharCode(val));
-          }
-          let formatStr = orderTmp.join("");
-          if (formatStr == "NCHW") {
-            this._initDataFormat = true;
-            return
-          };
-        }
-      }
+    if (this._checkDataFormat(this._init) || this._checkDataFormat(this._predict)) {
+      this._dataFormat = true;
     }
+
+    console.log("dataFormat: " + this._dataFormat);
   }
 
-  _checkpredictDataFormat() {
-    for (let op of this._predict.op) {
+  _checkDataFormat(model) {
+    for (let op of model.op) {
       for (let arg of op.arg) {
         if (arg.name == "order") {
           let data = this._checkArgData(arg);
@@ -165,8 +131,7 @@ class Caffe2ModelUtils {
           }
           let formatStr = orderTmp.join("");
           if (formatStr == "NCHW") {
-            this._predictDataFormat = true;
-            return
+            return true;
           };
         }
       }
@@ -211,13 +176,13 @@ class Caffe2ModelUtils {
   }
 
   _DataHandleforArg (arg) {
-    let dataShape = arg["value"];
-    let N = dataShape[0];
-    let C = dataShape[1];
-    let H = dataShape[2];
-    let W = dataShape[3];
+    let argValue = arg["value"];
+    let N = argValue[0];
+    let C = argValue[1];
+    let H = argValue[2];
+    let W = argValue[3];
 
-    if (this._predictDataFormat && dataShape.length === 4) {
+    if (this._dataFormat && argValue.length === 4) {
       arg["value"] = [N, H, W, C];
     }
 
@@ -225,40 +190,66 @@ class Caffe2ModelUtils {
   }
 
   _DataHandleforTensor (tensor) {
-    // For shape
-    let dataShape = tensor["shape"]["value"];
-    let N = dataShape[0];
-    let C = dataShape[1];
-    let H = dataShape[2];
-    let W = dataShape[3];
-    let flag = dataShape.length === 4 ? true : false;
+    if (this._isDNNL) {
+      tensor = this._uint8Toint8(tensor);
+    }
 
-    if (this._initDataFormat && flag) {
-      tensor["shape"]["value"] = [N, H, W, C];
+    // For shape
+    let shapeValue = tensor["shape"]["value"];
+    let shapeType = tensor["shape"]["type"];
+    let shapeCtor = this._TypetoArray(shapeType);
+    let N = shapeValue[0];
+    let C = shapeValue[1];
+    let H = shapeValue[2];
+    let W = shapeValue[3];
+    let flag = shapeValue.length === 4 ? true : false;
+
+    if (this._dataFormat && flag) {
+      tensor["shape"]["value"] = new shapeCtor([N, H, W, C]);
+    } else {
+      tensor["shape"]["value"] = new shapeCtor(this._DatatoArray(shapeValue));
     }
 
     // For value
-    let dataValue = tensor["values"]["value"];
-    let typeValue = tensor["values"]["type"];
-    let ctorValue = this._TypetoArray(typeValue);
+    let valuesValue = tensor["values"]["value"];
+    let valuesType = tensor["values"]["type"];
+    let valuesCtor = this._TypetoArray(valuesType);
 
-    let tmpDataValue;
-    if (this._initDataFormat && flag) {
-      tmpDataValue = new ctorValue(dataValue.length);
+    let valuesValueTmp;
+    if (this._dataFormat && flag) {
+      valuesValueTmp = new valuesCtor(valuesValue.length);
       for (let n = 0; n < N; ++n) {
         for (let c = 0; c < C; ++c) {
           for (let h = 0; h < H; ++h) {
             for (let w = 0; w < W; ++w) {
-              tmpDataValue[n*H*W*C + h*W*C + w*C + c] = dataValue[n*C*H*W + c*H*W + h*W + w];
+              valuesValueTmp[n*H*W*C + h*W*C + w*C + c] = valuesValue[n*C*H*W + c*H*W + h*W + w];
             }
           }
         }
       }
     } else {
-      tmpDataValue = new ctorValue(this._DatatoArray(dataValue));
+      valuesValueTmp = new valuesCtor(this._DatatoArray(valuesValue));
     }
 
-    tensor["values"]["value"] = tmpDataValue;
+    tensor["values"]["value"] = valuesValueTmp;
+
+    return tensor;
+  }
+
+  _uint8Toint8(tensor) {
+    // uint8 => int8
+    if (typeof tensor["values"] != "undefined" &&
+        tensor["values"]["type"] == "uint8" &&
+        typeof tensor["Y_zero_point"] != "undefined" &&
+        tensor["Y_zero_point"]["value"] == "128") {
+      tensor["values"]["type"] = "int8";
+      let tmpArray = [];
+      for ( let val of Object.values(tensor["values"]["value"])) {
+        tmpArray.push(val - 128);
+      }
+      tensor["values"]["value"] = tmpArray;
+      tensor["Y_zero_point"]["value"] = "0";
+    }
 
     return tensor;
   }

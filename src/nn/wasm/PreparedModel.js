@@ -882,11 +882,6 @@ export default class PreparedModel {
             throw new Error(`DEPTHWISE_CONV_2D: output type ${output.type} is not supported`);
           }
         }
-
-        console.log("  operation: %O", operation);
-        console.log("  convParams: %O", convParams);
-        console.log("  input value: ", this._getTensorDataView(input.type, input.value, product(input.dimensions)));  // delete
-        console.log("  output value: ", this._getTensorDataView(output.type, output.value, product(output.dimensions)));  // delete
       } break;
       case OperationCode.AVERAGE_POOL_2D:
       case OperationCode.MAX_POOL_2D: {
@@ -980,10 +975,6 @@ export default class PreparedModel {
                                 output.runtimeshape, output.value);
           }
         }
-
-        console.log("  operation: %O", operation);
-        console.log("  input value: ", this._getTensorDataView(input.type, input.value, product(input.dimensions)));  // delete
-        console.log("  output value: ", this._getTensorDataView(output.type, output.value, product(output.dimensions)));  // delete
       } break;
       case OperationCode.SOFTMAX: {
         allParametersPresent(2, 1);

@@ -87,8 +87,13 @@ class Caffe2ModelImporter {
       inputType = {
         type: this._nn.TENSOR_QUANT8_ASYMM_SIGNED,
         dimensions: inputDims,
-        scale: this._rawModel[0].arg["X_scale"]["value"],
+        scale: this._isDNNL ? 1 : this._rawModel[0].arg["X_scale"]["value"],
         zeroPoint: this._isDNNL ? 0 : this._rawModel[0].arg["X_zero_point"]["value"]
+      };
+    } else {
+      inputType = {
+        type: this._nn.TENSOR_FLOAT32,
+        dimensions: inputDims
       };
     }
     this._addTensor(inputName, inputType);
@@ -179,6 +184,7 @@ class Caffe2ModelImporter {
 
   // Add operands
   _addOperandsAndArgs() {
+    console.log(this._rawModel);  // For debug
     for (let nodeIdx = 0; nodeIdx < this._rawModel.length; nodeIdx++) {
       let node = this._rawModel[nodeIdx];
       console.log(`layer${nodeIdx}: ${node.operator} (${node.name})`);
@@ -187,6 +193,7 @@ class Caffe2ModelImporter {
       let inputs = [];
       let outputs = [];
       switch(node.operator) {
+        case "Conv":
         case "Int8Conv":
         case "Int8ConvRelu": {
           // Add inputs
@@ -200,8 +207,12 @@ class Caffe2ModelImporter {
           let inputType = this._getTensorTypeByName(inputName);
           let inputDime = inputType.dimensions;
           let inputTypeCode = inputType.type;
-          let inputPoint = inputType.zeroPoint || 0;
-          let inputScales = inputType.scale || 1;
+          let inputPoint = 0;
+          let inputScales = 1;
+          if (this._isQuantized) {
+            inputPoint = inputType.zeroPoint;
+            inputScales = inputType.scale;
+          }
           console.log(`  input shape: [${inputDime}]`);
 
           // Filter
@@ -209,15 +220,17 @@ class Caffe2ModelImporter {
           let filterDims = this._getAttributeValue(filterTensor, "shape");
           let filterValue = this._getAttributeValue(filterTensor, "values");
           let filterDataType = this._getAttributeType(filterTensor, "values");
-          let filterPoint = this._getAttributeValue(filterTensor, "Y_zero_point");
-          let filterScales = this._getAttributeValue(filterTensor, "Y_scales");
-          let filterTypeCode = null;
+          let filterPoint = 0;
+          let filterScales = 1;
+          if (this._isQuantized) {
+            filterPoint = this._getAttributeValue(filterTensor, "Y_zero_point");
+            filterScales = this._getAttributeValue(filterTensor, "Y_scales");
+          }
+          let filterTypeCode = inputTypeCode;
           let isPerChannel = false;
-          if (filterScales.length > 1) {
+          if (this._isQuantized && filterScales.length > 1) {
             filterTypeCode = this._nn.TENSOR_QUANT8_SYMM_PER_CHANNEL;
             isPerChannel = true;
-          } else {
-            filterTypeCode = inputTypeCode;
           }
 
           // Bias
@@ -225,16 +238,19 @@ class Caffe2ModelImporter {
           let biasDims = this._getAttributeValue(biasTensor, "shape");
           let biasValue = this._getAttributeValue(biasTensor, "values");
           let biasDataType = this._getAttributeType(biasTensor, "values");
-          let biasPoint = this._getAttributeValue(biasTensor, "Y_zero_point");
-          let biasScales = this._getAttributeValue(biasTensor, "Y_scales");
-          let biasTypeCode = this._nn.TENSOR_INT32;
-          let biasType = null;
-          if (isPerChannel) {
-            biasType = {
-              type: biasTypeCode,
-              dimensions: biasDims
-            };
-          } else {
+          let biasPoint = 0;
+          let biasScales = 1;
+          let biasTypeCode = this._nn.TENSOR_FLOAT32;
+          if (this._isQuantized) {
+            biasTypeCode = this._nn.TENSOR_INT32;
+            biasPoint = this._getAttributeValue(biasTensor, "Y_zero_point");
+            biasScales = this._getAttributeValue(biasTensor, "Y_scales");
+          }
+          let biasType = {
+            type: biasTypeCode,
+            dimensions: biasDims
+          };
+          if (this._isQuantized && !isPerChannel) {
             biasType = {
               type: biasTypeCode,
               dimensions: biasDims,
@@ -244,21 +260,111 @@ class Caffe2ModelImporter {
           }
           console.log(`  bias shape: [${biasDims}]`);
 
-          let kernels = this._getAttributeValue(args, "kernels");
+          // Kernel
+          let kernels = [];
+          if (this._isDNNL) {
+            kernels = this._getAttributeValue(args, "kernels");
+          } else {
+            let kernelsTmp = this._getAttributeValue(args, "kernel");
+            if (typeof kernelsTmp.length == "undefined") {
+              kernels = [kernelsTmp, kernelsTmp];
+            } else {
+              kernels = kernelsTmp;
+            }
+          }
+
+          // Dilations
+          // newKernel = dilations * (kernel - 1) + 1
+          let dilations = [1, 1];
+          if (args.hasOwnProperty("dilations")) {
+            dilations = this._getAttributeValue(args, "dilations");
+          }
+          kernels = [dilations[0] * (kernels[0] - 1) + 1, dilations[1] * (kernels[1] - 1) + 1];
+
           if (!kernels || kernels.length !== 2)
-            throw new Error('Invalid kernels');
+            throw new Error("Invalid kernels");
           let kernelHeight = kernels[0];
           let kernelWidth = kernels[1];
+          console.log(`  kernels: [${kernels}]`);
 
           // Pad
-          let pads = this._getAttributeValue(args, "pads");
-          let [paddingTop, paddingLeft, paddingBottom, paddingRight] = pads;
+          let pads = [];
+          if (this._isDNNL) {
+            pads = this._getAttributeValue(args, "pads");
+          } else {
+            let padsTmp = this._getAttributeValue(args, "pad");
+            if (typeof padsTmp.length == "undefined") {
+              pads = [padsTmp, padsTmp, padsTmp, padsTmp];
+            } else {
+              pads = padsTmp;
+            }
+          }
+          if (pads.length !== 4)
+            throw new Error("Invalid pads");
+          let paddingTop = pads[0];
+          let paddingLeft = pads[1];
+          let paddingBottom = pads[2];
+          let paddingRight = pads[3];
           console.log(`  pads: [${pads}]`);
 
           // Stride
-          let strides = this._getAttributeValue(args, "strides");
-          let [strideHeight, strideWidth] = strides;
+          let strides = [];
+          if (this._isDNNL) {
+            strides = this._getAttributeValue(args, "strides");
+          } else {
+            let stridesTmp = this._getAttributeValue(args, "stride");
+            if (typeof stridesTmp.length == "undefined") {
+              strides = [stridesTmp, stridesTmp];
+            } else {
+              strides = stridesTmp;
+            }
+          }
+          if (!strides || strides.length !== 2)
+            throw new Error("Invalid strides");
+          let strideHeight = strides[0];
+          let strideWidth = strides[1];
           console.log(`  strides: [${strides}]`);
+
+          // Fusion type
+          // 0: FUSION_UNKNOWN
+          // 1: FUSION_CONV_RELU
+          // 2: FUSION_CONV_SUM
+          // 3: FUSION_CONV_SUM_RELU
+          // 4: FUSION_MAX = FUSION_CONV_SUM_RELU + 1
+          let fusion = 0;
+          if (args.hasOwnProperty("fusion_type")) {
+            fusion = this._getAttributeValue(args, "fusion_type");
+          }
+
+          // Fuse Relu
+          let nextNode = this._rawModel[nodeIdx + 1];
+          let outputTensor = node.output[0];
+          let outputName = this._getAttributeName(outputTensor);
+          let nextInputTensor = nextNode.input[0];
+          let nextInputName = this._getAttributeName(nextInputTensor);
+          let nextOutputTensor = nextNode.output[0];
+          let nextOutputName = this._getAttributeName(nextOutputTensor);
+          let fuseCode = 0;
+          if (this._isDNNL) {
+            let boundMax = 0;
+            let boundMin = 0;
+            if (args.hasOwnProperty("bound_max") && args.hasOwnProperty("bound_min")) {
+              boundMax = this._getAttributeValue(args, "bound_max");
+              boundMin = this._getAttributeValue(args, "bound_min");
+              console.log(`  bound: [${boundMax}, ${boundMin}]`);
+            }
+            fuseCode = this._getFuseCode(boundMax, boundMin);
+          } else {
+            if (nextNode && nextNode.operator === "Relu" && outputName === nextInputName) {
+              // Fuse relu
+              fuseCode = this._nn.FUSED_RELU;
+              nodeIdx++;
+              outputName = nextOutputName;
+            } else {
+              fuseCode = this._nn.FUSED_NONE;
+            }
+          }
+          console.log(`  fuseCode: ${fuseCode}`);
 
           // Group
           let isDepthWiseConv = false;
@@ -268,20 +374,9 @@ class Caffe2ModelImporter {
             group = this._getAttributeValue(args, "group");
           }
 
-          // Fuse Relu
-          let boundMax = 0;
-          let boundMin = 0;
-          if (args.hasOwnProperty("bound_max") && args.hasOwnProperty("bound_min")) {
-            boundMax = this._getAttributeValue(args, "bound_max");
-            boundMin = this._getAttributeValue(args, "bound_min");
-            console.log(`  bound: [${boundMax}, ${boundMin}]`);
-          }
-          let fuseCode = this._getFuseCode(boundMax, boundMin);
-          console.log(`  fuseCode: ${fuseCode}`);
-
           if (group > 1) {
             if (group !== inputChannel) {
-              throw new Error('Group convolution is not supported.');
+              throw new Error("Group convolution is not supported.");
             } else {
               isDepthWiseConv = true;
               console.log(`  group: ${group} (depthwise convolution)`);
@@ -305,13 +400,11 @@ class Caffe2ModelImporter {
           }
           console.log(`  filter shape: [${filterDims}]`);
 
-          let filterType = {};
-          if (isPerChannel) {
-            filterType = {
-              type: filterTypeCode,
-              dimensions: filterDims
-            };
-          } else {
+          let filterType = {
+            type: filterTypeCode,
+            dimensions: filterDims
+          };
+          if (this._isQuantized && !isPerChannel) {
             filterType = {
               type: filterTypeCode,
               dimensions: filterDims,
@@ -346,8 +439,6 @@ class Caffe2ModelImporter {
           inputs.push(this._addArgInt32([fuseCode]));
 
           // Add outputs
-          let outputTensor = node.output[0];
-          let outputName = this._getAttributeName(outputTensor);
           let outputTypeCode = inputTypeCode;
           let outputDims = [
             inputDime[0],
@@ -355,7 +446,10 @@ class Caffe2ModelImporter {
             Math.floor((inputDime[2] - kernelWidth + paddingRight + paddingLeft) / strideWidth + 1),
             biasDims[0]
           ];
-          let outputType = [];
+          let outputType = {
+            type: outputTypeCode,
+            dimensions: outputDims
+          };
           if (this._isQuantized) {
             let outputScales = 1;
             if (args.hasOwnProperty("Y_scale")) {
@@ -371,11 +465,6 @@ class Caffe2ModelImporter {
               scale: outputScales,
               zeroPoint: outputPoint
             };
-          } else {
-            outputType = {
-              type: outputTypeCode,
-              dimensions: outputDims
-            };
           }
 
           let outputID = this._addTensor(outputName, outputType);
@@ -384,12 +473,9 @@ class Caffe2ModelImporter {
 
           // Add operation
           opCode = isDepthWiseConv ? this._nn.DEPTHWISE_CONV_2D : this._nn.CONV_2D;
-
-          // For debug
-          console.log("  node: %O", node);
-          console.log("  input type: %O", inputType);
-          console.log("  output type: %O", outputType);
         } break;
+        case "MaxPool":
+        case "AveragePool":
         case "Int8AveragePool": {
           // Add inputs
           let inputTensor = node.input[0];
@@ -400,28 +486,80 @@ class Caffe2ModelImporter {
           let inputType = this._getTensorTypeByName(inputName);
           let inputDime = inputType.dimensions;
           let inputTypeCode = inputType.type;
-          let inputPoint = inputType.zeroPoint || 0;
-          let inputScales = inputType.scale || 1;
+          let inputPoint = 0;
+          let inputScales = 1;
+          if (this._isQuantized) {
+            inputPoint = inputType.zeroPoint;
+            inputScales = inputType.scale;
+          }
           console.log(`  input shape: [${inputDime}]`);
 
           // Pad
-          let pads = [0, 0, 0, 0];
-          if (args.hasOwnProperty("pads")) {
-            pads = this._getAttributeValue(args, "pads");
+          let pads = [];
+          if (this._isDNNL) {
+            if (args.hasOwnProperty("pads")) {
+              pads = this._getAttributeValue(args, "pads");
+            } else {
+              pads = [0, 0, 0, 0];
+            }
+          } else {
+            let padsTmp = this._getAttributeValue(args, "pad");
+            if (typeof padsTmp.length == "undefined") {
+              pads = [padsTmp, padsTmp, padsTmp, padsTmp];
+            } else {
+              pads = padsTmp;
+            }
           }
-          let [paddingTop, paddingLeft, paddingBottom, paddingRight] = pads;
+          if (pads.length !== 4)
+            throw new Error("Invalid pads");
+          let paddingTop = pads[0];
+          let paddingLeft = pads[1];
+          let paddingBottom = pads[2];
+          let paddingRight = pads[3];
           console.log(`  pads: [${pads}]`);
 
           // Stride
-          let strides = this._getAttributeValue(args, "strides");
-          let [strideHeight, strideWidth] = strides;
+          let strides = [];
+          if (this._isDNNL) {
+            strides = this._getAttributeValue(args, "strides");
+          } else {
+            let stridesTmp = this._getAttributeValue(args, "stride");
+            if (typeof stridesTmp.length == "undefined") {
+              strides = [stridesTmp, stridesTmp];
+            } else {
+              strides = stridesTmp;
+            }
+          }
+          if (!strides || strides.length !== 2)
+            throw new Error("Invalid strides");
+          let strideHeight = strides[0];
+          let strideWidth = strides[1];
           console.log(`  strides: [${strides}]`);
 
           // Filter
-          let filter = this._getAttributeValue(args, "kernels");
+          let filter = [];
+          if (this._isDNNL) {
+            filter = this._getAttributeValue(args, "kernels");
+          } else {
+            let global_pooling = 0;
+            let filterTmp = this._getAttributeValue(args, "kernel");
+            if (args.hasOwnProperty("global_pooling")) {
+              global_pooling = this._getAttributeValue(args, "global_pooling");
+            }
+            if (typeof filterTmp.length == "undefined") {
+              if (global_pooling == 1 && filterTmp == 0) {
+                filter = [inputDime[1], inputDime[2]];
+              } else {
+                filter = [filterTmp, filterTmp];
+              }
+            } else {
+              filter = filterTmp;
+            }
+          }
           if (!filter || filter.length !== 2)
-            throw new Error('Invalid filter');
-          let [filterWidth, filterHeight] = filter;
+            throw new Error("Invalid filter");
+          let filterWidth = filter[0];
+          let filterHeight = filter[1];
           console.log(`  filter: [${filter}]`);
 
           // Fuse Relu
@@ -484,88 +622,155 @@ class Caffe2ModelImporter {
           console.log(`  output shape: [${outputDims}]`);
 
           // Add operation
-          opCode = this._nn.AVERAGE_POOL_2D;
-
-          // For debug
-          console.log("  node: %O", node);
-          console.log("  input type: %O", inputType);
-          console.log("  output type: %O", outputType);
+          if (node.operator === "MaxPool") {
+            opCode = this._nn.MAX_POOL_2D;
+          } else if (node.operator === "AveragePool" || node.operator === "Int8AveragePool") {
+            opCode = this._nn.AVERAGE_POOL_2D;
+          }
         } break;
-        case "Softmax": {
-          // Skip softmax for debug
-          let inputTensor = node.input[0];
-          let inputName = this._getAttributeName(inputTensor);
-          let outputTensor = node.output[0];
-          let outputName = this._getAttributeName(outputTensor);
-          console.log(`Skip Softmax: ${inputName} -> ${outputName}`);
-          this._tensorIds[outputName] = this._tensorIds[inputName];
-          continue;
-          /*
+        case "Concat": {
           // Add inputs
-          let inputTensor = node.input[0];
+          let inputTensors = node.input;
           let args = node.arg;
 
           // Input
-          let inputName = this._getAttributeName(inputTensor);
-          let inputType = this._getTensorTypeByName(inputName);
-          let inputDime = inputType.dimensions;
-          let inputTypeCode = inputType.type;
-          let inputPoint = inputType.zeroPoint || 0;
-          let inputScales = inputType.scale || 1;
-          console.log(`  input shape: [${inputDime}]`);
+          let input0Name = this._getAttributeName(inputTensors[0]);
+          let input0Type = this._getTensorTypeByName(input0Name);
+          let input0Dime = input0Type.dimensions;
+          let input0TypeCode = input0Type.type;
 
-          // Beta
-          let beta = 1.0;
-          console.log(`  Beta: [${beta}]`);
+          for (let i = 0; i < inputTensors.length; ++i) {
+            let inputName1 = this._getAttributeName(inputTensors[i]);
+            let inputType1 = this._getTensorTypeByName(inputName1);
+            let inputDime1 = inputType1.dimensions;
+            inputs.push(this._getTensorIdByName(inputName1));
+            console.log(`  input shape: [${inputDime1}]`);
+          }
 
           // Axis
-          let axis = this._getAttributeValue(args, "axis");
-          console.log(`  Axis: [${axis}]`);
+          let axis = 3;  // default: channel(NHWC)
+          if (args.hasOwnProperty("axis")) {
+            axis = this._getAttributeValue(args, "axis");
+            let order = this._getAttributeValue(args, "order");
+            if (input0Dime.length === 4 && order == "NCHW") {
+              axis = {
+                0: 0,
+                1: 3,
+                2: 1,
+                3: 2,
+              }[axis];
+            }
+          }
+          if (axis && (axis > 3 || axis < 0)) {
+            throw new Error(`Invalid axis ${axis}`);
+          }
+          console.log(`  axis: [${axis}]`);
 
-          inputs.push(this._getTensorIdByName(inputName));
-          inputs.push(this._addArgFloat32([beta]));
-          //inputs.push(this._addArgInt32([axis]));
+          inputs.push(this._addArgInt32([axis]));
 
           // Add outputs
           let outputTensor = node.output[0];
           let outputName = this._getAttributeName(outputTensor);
-          let outputTypeCode = inputTypeCode;
-          let outputDims = inputDime;
-          let outputType = [];
-          if (this._isQuantized) {
-            let outputScales = 0.00390625;  // 1.f/256
-            if (args.hasOwnProperty("Y_scale")) {
-              outputScales = this._getAttributeValue(args, "Y_scale");
-            }
-            let outputPoint = this._isDNNL ? -128 : 0;
-            if (args.hasOwnProperty("Y_zero_point")) {
-              outputPoint = this._getAttributeValue(args, "Y_zero_point");
-            }
-            outputType = {
-              type: outputTypeCode,
-              dimensions: outputDims,
-              scale: outputScales,
-              zeroPoint: outputPoint
-            };
-          } else {
-            outputType = {
-              type: outputTypeCode,
-              dimensions: outputDims
-            };
+          let outputTypeCode = input0TypeCode;
+          let outputDims = [...input0Dime]
+          for (let i = 1; i < inputTensors.length; ++i) {
+            let inputName2 = this._getAttributeName(inputTensors[i]);
+            let inputType2 = this._getTensorTypeByName(inputName2);
+            outputDims[axis] += inputType2.dimensions[axis];
           }
+          let outputType = {
+            type: outputTypeCode,
+            dimensions: outputDims
+          };
 
           let outputID = this._addTensor(outputName, outputType);
           outputs.push(outputID);
-          console.log(`  output type: [${outputDims}]`);
+          console.log(`  output shape: [${outputDims}]`);
 
           // Add operation
-          opCode = this._nn.SOFTMAX;
-          */
+          opCode = this._nn.CONCATENATION;
+        } break;
+        case "Dropout": {
+          // Skip Dropout
+          let inputTensor = node.input[0];
+          let inputName = this._getAttributeName(inputTensor);
+          let outputTensor = node.output[0];
+          let outputName = this._getAttributeName(outputTensor);
+          console.log(`Skip Dropout: ${inputName} -> ${outputName}`);
+          this._tensorIds[outputName] = this._tensorIds[inputName];
+          continue;
+        } break;
+        case "Softmax": {
+          if (this._isDNNL) {
+            // Skip softmax for debug
+            let inputTensor = node.input[0];
+            let inputName = this._getAttributeName(inputTensor);
+            let outputTensor = node.output[0];
+            let outputName = this._getAttributeName(outputTensor);
+            console.log(`Skip Softmax: ${inputName} -> ${outputName}`);
+            this._tensorIds[outputName] = this._tensorIds[inputName];
+            continue;
+          } else {
+            // Add inputs
+            let inputTensor = node.input[0];
+            let args = node.arg;
 
-          // For debug
-          console.log("  node: %O", node);
-          console.log("  input type: %O", inputType);
-          console.log("  output type: %O", outputType);
+            // Input
+            let inputName = this._getAttributeName(inputTensor);
+            let inputType = this._getTensorTypeByName(inputName);
+            let inputDime = inputType.dimensions;
+            let inputTypeCode = inputType.type;
+            let inputPoint = inputType.zeroPoint || 0;
+            let inputScales = inputType.scale || 1;
+            console.log(`  input shape: [${inputDime}]`);
+
+            // Beta
+            let beta = 1.0;
+            console.log(`  Beta: [${beta}]`);
+            /*
+            // Axis
+            let axis = this._getAttributeValue(args, "axis");
+            console.log(`  Axis: [${axis}]`);
+            */
+            inputs.push(this._getTensorIdByName(inputName));
+            inputs.push(this._addArgFloat32([beta]));
+            //inputs.push(this._addArgInt32([axis]));
+
+            // Add outputs
+            let outputTensor = node.output[0];
+            let outputName = this._getAttributeName(outputTensor);
+            let outputTypeCode = inputTypeCode;
+            let outputDims = inputDime;
+            let outputType = [];
+            if (this._isQuantized) {
+              let outputScales = 0.00390625;  // 1.f/256
+              if (args.hasOwnProperty("Y_scale")) {
+                outputScales = this._getAttributeValue(args, "Y_scale");
+              }
+              let outputPoint = this._isDNNL ? -128 : 0;
+              if (args.hasOwnProperty("Y_zero_point")) {
+                outputPoint = this._getAttributeValue(args, "Y_zero_point");
+              }
+              outputType = {
+                type: outputTypeCode,
+                dimensions: outputDims,
+                scale: outputScales,
+                zeroPoint: outputPoint
+              };
+            } else {
+              outputType = {
+                type: outputTypeCode,
+                dimensions: outputDims
+              };
+            }
+
+            let outputID = this._addTensor(outputName, outputType);
+            outputs.push(outputID);
+            console.log(`  output type: [${outputDims}]`);
+
+            // Add operation
+            opCode = this._nn.SOFTMAX;
+          }
         } break;
         default: {
           throw new Error(`${node.operator} is not supported.`);
