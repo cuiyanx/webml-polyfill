@@ -9,11 +9,11 @@ const modelZoo = {
     inputSize: [224, 224, 3],
     outputSize: 1001,
     modelFile: '../image_classification/model/mobilenet_v1_quant_predict.pb',
-    labelsFile: '../image_classification/model/labels1000.txt',
+    labelsFile: '../image_classification/model/labels1001.txt',
     preOptions: {
       mean: [127.5, 127.5, 127.5],
       std: [1, 1, 1],
-      channelScheme: 'BGR',
+      channelScheme: 'RGB',
     },
     postOptions: {
       softmax: false

@@ -318,17 +318,11 @@ class BaseRunner {
       if (rawModel[rawModel.length - 1].operator == "Softmax") {
         // Output value: int8 -> f32
         let lastNode = rawModel[rawModel.length - 2];
-        let weightScale = Float32Array.from(lastNode.input[1]["Y_scales"]["value"]);
-        let srcScale = new Float32Array([rawModel[rawModel.length - 3]["arg"]["Y_scale"]["value"]]);
-
-        let outputScale = [];
-        for (let i = 0; i < weightScale.length; i++) {
-          outputScale.push(weightScale[i] * srcScale[0]);
-        }
+        let outputScale = Float32Array.from(lastNode.input[2]["Y_scales"]["value"]);
         console.log(outputScale);
 
         let outputF32 = [];
-        for (let i = 0; i < weightScale.length; i++) {
+        for (let i = 0; i < outputScale.length; i++) {
           outputF32.push(output[i] / outputScale[i]);
         }
         console.log(outputF32);
@@ -351,10 +345,15 @@ class BaseRunner {
           outputTmp.push(tmpNum);
         }
 
+        for (let i = 0; i < outputTmp.length; i++) {
+          if (outputTmp[i] != 0) console.log(i + ": " + outputTmp[i]);
+        }
+
         this._outputTensor = [new Float32Array(outputTmp)];
-        console.log(this._outputTensor);
       }
     }
+
+    console.log(this._outputTensor);
 
     const delta = performance.now() - start;
     this._setInferenceTime(delta);

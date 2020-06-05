@@ -87,7 +87,7 @@ class Caffe2ModelImporter {
       inputType = {
         type: this._nn.TENSOR_QUANT8_ASYMM_SIGNED,
         dimensions: inputDims,
-        scale: this._isDNNL ? 1 : this._rawModel[0].arg["X_scale"]["value"],
+        scale: this._rawModel[0].arg["X_scale"]["value"],
         zeroPoint: this._isDNNL ? 0 : this._rawModel[0].arg["X_zero_point"]["value"]
       };
     } else {
@@ -328,9 +328,10 @@ class Caffe2ModelImporter {
           // Fusion type
           // 0: FUSION_UNKNOWN
           // 1: FUSION_CONV_RELU
-          // 2: FUSION_CONV_SUM
-          // 3: FUSION_CONV_SUM_RELU
-          // 4: FUSION_MAX = FUSION_CONV_SUM_RELU + 1
+          // 2: FUSION_CONV_BRELU
+          // 3: FUSION_CONV_SUM
+          // 4: FUSION_CONV_SUM_RELU
+          // 5: FUSION_MAX = FUSION_CONV_SUM_RELU + 1
           let fusion = 0;
           if (args.hasOwnProperty("fusion_type")) {
             fusion = this._getAttributeValue(args, "fusion_type");

@@ -217,6 +217,7 @@ const getTensorArray = (image, inputTensor, options, layout = 'NHWC') => {
   const channelScheme = preOptions.channelScheme || 'RGB';
   const imageChannels = options.imageChannels || 4; // RGBA
   const drawOptions = options.drawOptions;
+  const isDNNL = options.isDNNL || false;
 
   let canvasElement = document.createElement('canvas');
   canvasElement.width = width;
@@ -301,6 +302,19 @@ const getTensorArray = (image, inputTensor, options, layout = 'NHWC') => {
     }
   } else {
     throw new Error(`Unsupport '${channelScheme}' Layout`);
+  }
+
+  if (isDNNL) {
+    let tensorTmp = Float32Array.from(tensor);
+    let scale = 0.007874015718698502;
+    for (let h = 0; h < height; ++h) {
+      for (let w = 0; w < width; ++w) {
+        for (let c = 0; c < channels; ++c) {
+          let value = tensorTmp[h * width * imageChannels + w * imageChannels + c];
+          tensor[h * width * channels + w * channels + c] = value / mean[c] / scale;
+        }
+      }
+    }
   }
 };
 
