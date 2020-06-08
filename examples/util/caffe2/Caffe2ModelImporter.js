@@ -713,76 +713,65 @@ class Caffe2ModelImporter {
           continue;
         } break;
         case "Softmax": {
-          if (this._isDNNL) {
-            // Skip softmax for debug
-            let inputTensor = node.input[0];
-            let inputName = this._getAttributeName(inputTensor);
-            let outputTensor = node.output[0];
-            let outputName = this._getAttributeName(outputTensor);
-            console.log(`Skip Softmax: ${inputName} -> ${outputName}`);
-            this._tensorIds[outputName] = this._tensorIds[inputName];
-            continue;
-          } else {
-            // Add inputs
-            let inputTensor = node.input[0];
-            let args = node.arg;
+          // Add inputs
+          let inputTensor = node.input[0];
+          let args = node.arg;
 
-            // Input
-            let inputName = this._getAttributeName(inputTensor);
-            let inputType = this._getTensorTypeByName(inputName);
-            let inputDime = inputType.dimensions;
-            let inputTypeCode = inputType.type;
-            let inputPoint = inputType.zeroPoint || 0;
-            let inputScales = inputType.scale || 1;
-            console.log(`  input shape: [${inputDime}]`);
+          // Input
+          let inputName = this._getAttributeName(inputTensor);
+          let inputType = this._getTensorTypeByName(inputName);
+          let inputDime = inputType.dimensions;
+          let inputTypeCode = inputType.type;
+          let inputPoint = inputType.zeroPoint || 0;
+          let inputScales = inputType.scale || 1;
+          console.log(`  input shape: [${inputDime}]`);
 
-            // Beta
-            let beta = 1.0;
-            console.log(`  Beta: [${beta}]`);
-            /*
-            // Axis
-            let axis = this._getAttributeValue(args, "axis");
-            console.log(`  Axis: [${axis}]`);
-            */
-            inputs.push(this._getTensorIdByName(inputName));
-            inputs.push(this._addArgFloat32([beta]));
-            //inputs.push(this._addArgInt32([axis]));
+          // Beta
+          let beta = 1.0;
+          console.log(`  Beta: [${beta}]`);
+          /*
+          // Axis
+          let axis = this._getAttributeValue(args, "axis");
+          console.log(`  Axis: [${axis}]`);
+          */
+          inputs.push(this._getTensorIdByName(inputName));
+          inputs.push(this._addArgFloat32([beta]));
+          //inputs.push(this._addArgInt32([axis]));
 
-            // Add outputs
-            let outputTensor = node.output[0];
-            let outputName = this._getAttributeName(outputTensor);
-            let outputTypeCode = inputTypeCode;
-            let outputDims = inputDime;
-            let outputType = [];
-            if (this._isQuantized) {
-              let outputScales = 0.00390625;  // 1.f/256
-              if (args.hasOwnProperty("Y_scale")) {
-                outputScales = this._getAttributeValue(args, "Y_scale");
-              }
-              let outputPoint = this._isDNNL ? -128 : 0;
-              if (args.hasOwnProperty("Y_zero_point")) {
-                outputPoint = this._getAttributeValue(args, "Y_zero_point");
-              }
-              outputType = {
-                type: outputTypeCode,
-                dimensions: outputDims,
-                scale: outputScales,
-                zeroPoint: outputPoint
-              };
-            } else {
-              outputType = {
-                type: outputTypeCode,
-                dimensions: outputDims
-              };
+          // Add outputs
+          let outputTensor = node.output[0];
+          let outputName = this._getAttributeName(outputTensor);
+          let outputTypeCode = inputTypeCode;
+          let outputDims = inputDime;
+          let outputType = [];
+          if (this._isQuantized) {
+            let outputScales = 0.00390625;  // 1.f/256
+            if (args.hasOwnProperty("Y_scale")) {
+              outputScales = this._getAttributeValue(args, "Y_scale");
             }
-
-            let outputID = this._addTensor(outputName, outputType);
-            outputs.push(outputID);
-            console.log(`  output type: [${outputDims}]`);
-
-            // Add operation
-            opCode = this._nn.SOFTMAX;
+            let outputPoint = this._isDNNL ? -128 : 0;
+            if (args.hasOwnProperty("Y_zero_point")) {
+              outputPoint = this._getAttributeValue(args, "Y_zero_point");
+            }
+            outputType = {
+              type: outputTypeCode,
+              dimensions: outputDims,
+              scale: outputScales,
+              zeroPoint: outputPoint
+            };
+          } else {
+            outputType = {
+              type: outputTypeCode,
+              dimensions: outputDims
+            };
           }
+
+          let outputID = this._addTensor(outputName, outputType);
+          outputs.push(outputID);
+          console.log(`  output type: [${outputDims}]`);
+
+          // Add operation
+          opCode = this._nn.SOFTMAX;
         } break;
         default: {
           throw new Error(`${node.operator} is not supported.`);
