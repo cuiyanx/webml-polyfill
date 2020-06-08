@@ -723,18 +723,21 @@ class Caffe2ModelImporter {
           let inputDime = inputType.dimensions;
           let inputTypeCode = inputType.type;
           console.log(`  input shape: [${inputDime}]`);
-
+          /*
           // Beta
           let beta = 1.0;
           console.log(`  Beta: [${beta}]`);
-          /*
-          // Axis
-          let axis = this._getAttributeValue(args, "axis");
-          console.log(`  Axis: [${axis}]`);
           */
+          // Axis
+          let axis = 1;
+          if (args.hasOwnProperty("axis")) {
+            axis = this._getAttributeValue(args, "axis");
+          }
+          console.log(`  Axis: [${axis}]`);
+
           inputs.push(this._getTensorIdByName(inputName));
-          inputs.push(this._addArgFloat32([beta]));
-          //inputs.push(this._addArgInt32([axis]));
+          //inputs.push(this._addArgFloat32([beta]));
+          inputs.push(this._addArgInt32([axis]));
 
           // Add outputs
           let outputTensor = node.output[0];
