@@ -722,8 +722,6 @@ class Caffe2ModelImporter {
           let inputType = this._getTensorTypeByName(inputName);
           let inputDime = inputType.dimensions;
           let inputTypeCode = inputType.type;
-          let inputPoint = inputType.zeroPoint || 0;
-          let inputScales = inputType.scale || 1;
           console.log(`  input shape: [${inputDime}]`);
 
           // Beta
@@ -743,28 +741,10 @@ class Caffe2ModelImporter {
           let outputName = this._getAttributeName(outputTensor);
           let outputTypeCode = inputTypeCode;
           let outputDims = inputDime;
-          let outputType = [];
-          if (this._isQuantized) {
-            let outputScales = 0.00390625;  // 1.f/256
-            if (args.hasOwnProperty("Y_scale")) {
-              outputScales = this._getAttributeValue(args, "Y_scale");
-            }
-            let outputPoint = this._isDNNL ? -128 : 0;
-            if (args.hasOwnProperty("Y_zero_point")) {
-              outputPoint = this._getAttributeValue(args, "Y_zero_point");
-            }
-            outputType = {
-              type: outputTypeCode,
-              dimensions: outputDims,
-              scale: outputScales,
-              zeroPoint: outputPoint
-            };
-          } else {
-            outputType = {
-              type: outputTypeCode,
-              dimensions: outputDims
-            };
-          }
+          let outputType = {
+            type: outputTypeCode,
+            dimensions: outputDims
+          };
 
           let outputID = this._addTensor(outputName, outputType);
           outputs.push(outputID);
