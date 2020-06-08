@@ -309,14 +309,14 @@ class BaseRunner {
 
     const start = performance.now();
     status = await this._model.compute(this._inputTensor, this._outputTensor);
-    /*
+
     if (this._currentModelInfo.isDNNL) {
       let rawModel = this._rawModel;
       console.log(rawModel);
       let outputF32 = Array.from(this._outputTensor[0]);
 
       if (rawModel[rawModel.length - 1].operator == "Softmax") {
-
+        /*
         // Output value: int8 -> f32
         let lastNode = rawModel[rawModel.length - 2];
         let outputScale = Float32Array.from(lastNode.input[2]["Y_scales"]["value"]);
@@ -327,7 +327,7 @@ class BaseRunner {
           outputF32.push(output[i] / outputScale[i]);
         }
         console.log(outputF32);
-
+        */
         // Skip Softmax and realized by function
         let outputTmp = [];
         let expSum = 0;
@@ -353,7 +353,7 @@ class BaseRunner {
         this._outputTensor = [new Float32Array(outputTmp)];
       }
     }
-    */
+
     console.log(this._outputTensor);
 
     const delta = performance.now() - start;
