@@ -313,7 +313,7 @@ class BaseRunner {
     if (this._currentModelInfo.isDNNL) {
       let rawModel = this._rawModel;
       console.log(rawModel);
-      let output = Array.from(this._outputTensor[0]);
+      let outputF32 = Array.from(this._outputTensor[0]);
 
       if (rawModel[rawModel.length - 1].operator == "Softmax") {
         /*
