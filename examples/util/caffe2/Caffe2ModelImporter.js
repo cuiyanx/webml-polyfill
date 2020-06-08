@@ -460,6 +460,17 @@ class Caffe2ModelImporter {
             if (args.hasOwnProperty("Y_zero_point")) {
               outputPoint = this._getAttributeValue(args, "Y_zero_point");
             }
+
+            if (this._isDNNL) {
+              if (outputScales == 1) {
+                outputTypeCode = this._nn.TENSOR_FLOAT32;
+              } else if (outputPoint == 0) {
+                outputTypeCode = this._nn.TENSOR_QUANT8_ASYMM;
+              } else if (outputPoint == 128) {
+                outputTypeCode = this._nn.TENSOR_QUANT8_ASYMM_SIGNED;
+              }
+            }
+
             outputType = {
               type: outputTypeCode,
               dimensions: outputDims,

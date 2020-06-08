@@ -22,7 +22,7 @@ class ImageClassificationRunner extends BaseRunner {
 
   _getOutputTensorTypedArray = () => {
     let typedArray = this._currentModelInfo.isQuantized || false ? Uint8Array : Float32Array;
-    if (this._currentModelInfo.isDNNL) typedArray = Int8Array;
+    if (this._currentModelInfo.isDNNL) typedArray = Float32Array;
     return typedArray;
   };
 
