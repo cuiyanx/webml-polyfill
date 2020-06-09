@@ -13,10 +13,8 @@ const modelZoo = {
     preOptions: {
       mean: [127.5, 127.5, 127.5],
       std: [1, 1, 1],
-      channelScheme: 'RGB',
-    },
-    postOptions: {
-      softmax: false
+      channelScheme: 'BGR',
+      rescaleSize: 256,
     },
     intro: 'An efficient Convolutional Neural Networks for Mobile Vision Applications.',
     paperUrl: 'https://arxiv.org/pdf/1704.04861.pdf'

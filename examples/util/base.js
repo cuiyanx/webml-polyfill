@@ -218,6 +218,7 @@ const getTensorArray = (image, inputTensor, options, layout = 'NHWC') => {
   const imageChannels = options.imageChannels || 4; // RGBA
   const drawOptions = options.drawOptions;
   const isDNNL = options.isDNNL || false;
+  const rescaleSize = preOptions.rescaleSize || 256;
 
   let canvasElement = document.createElement('canvas');
   canvasElement.width = width;
@@ -233,6 +234,19 @@ const getTensorArray = (image, inputTensor, options, layout = 'NHWC') => {
       const scaledWidth = Math.floor(image.width / resizeRatio);
       const scaledHeight = Math.floor(image.height / resizeRatio);
       canvasContext.drawImage(image, 0, 0, scaledWidth, scaledHeight);
+    } else if (isDNNL) {
+      let newWidth, newHeight;
+      if (image.width > image.height) {
+        newWidth = rescaleSize;
+        newHeight = Math.floor(newWidth * image.height / image.width);
+      } else {
+        newHeight = rescaleSize;
+        newWidth = Math.floor(newHeight * image.width / image.height);
+      }
+
+      let sideWidth = Math.floor((newWidth - width) / 2);
+      let sideHeight = Math.floor((newHeight - height) / 2);
+      canvasContext.drawImage(image, 0 - sideWidth, 0 - sideHeight, width + sideWidth, height + sideHeight);
     } else {
       canvasContext.drawImage(image, 0, 0, width, height);
     }
