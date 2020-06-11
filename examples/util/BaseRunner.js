@@ -288,7 +288,7 @@ class BaseRunner {
 
     // Warm up model
     const computeStart = performance.now();
-    const computeStatus = await this._model.compute(this._inputTensor, this._outputTensor);
+    const computeStatus = 9999; //await this._model.compute(this._inputTensor, this._outputTensor);
     const computeDelta = performance.now() - computeStart;
     console.log(`Computed Status: [${computeStatus}]`);
     console.log(`Warm up Time: ${computeDelta.toFixed(2)} ms`);
