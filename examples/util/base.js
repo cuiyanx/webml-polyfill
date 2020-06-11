@@ -238,14 +238,14 @@ const getTensorArray = (image, inputTensor, options, layout = 'NHWC') => {
       let newWidth, newHeight;
       if (image.width > image.height) {
         newWidth = rescaleSize;
-        newHeight = Math.floor(newWidth * image.height / image.width);
+        newHeight = Math.floor(newWidth * image.width / image.height);
       } else {
         newHeight = rescaleSize;
-        newWidth = Math.floor(newHeight * image.width / image.height);
+        newWidth = Math.floor(newHeight * image.height / image.width);
       }
 
-      let sideWidth = Math.floor((newWidth - width) / 2);
-      let sideHeight = Math.floor((newHeight - height) / 2);
+      let sideWidth = Math.abs(Math.floor((newWidth - width) / 2));
+      let sideHeight = Math.abs(Math.floor((newHeight - height) / 2));
       let startX = 0 - sideWidth;
       let startY = 0 - sideHeight;
       canvasContext.drawImage(image, startX, startY, newWidth, newHeight);
