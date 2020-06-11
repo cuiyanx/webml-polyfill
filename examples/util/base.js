@@ -237,16 +237,18 @@ const getTensorArray = (image, inputTensor, options, layout = 'NHWC') => {
     } else if (isDNNL) {
       let newWidth, newHeight;
       if (image.width > image.height) {
-        newWidth = rescaleSize;
+        newWidth = width;
         newHeight = Math.floor(newWidth * image.height / image.width);
       } else {
-        newHeight = rescaleSize;
+        newHeight = height;
         newWidth = Math.floor(newHeight * image.width / image.height);
       }
 
-      let sideWidth = Math.floor((newWidth - width) / 2);
-      let sideHeight = Math.floor((newHeight - height) / 2);
-      canvasContext.drawImage(image, 0 - sideWidth, 0 - sideHeight, width + sideWidth, height + sideHeight);
+      let sideWidth = Math.abs(Math.floor((newWidth - width) / 2));
+      let sideHeight = Math.abs(Math.floor((newHeight - height) / 2));
+      let startX = 0 + sideWidth;
+      let startY = 0 + sideHeight;
+      canvasContext.drawImage(image, startX, startY, newWidth, newHeight);
     } else {
       canvasContext.drawImage(image, 0, 0, width, height);
     }
