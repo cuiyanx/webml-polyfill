@@ -305,56 +305,9 @@ class BaseRunner {
     } else {
       getTensorArray(src, this._inputTensor, options);
     }
-    this._initOutputTensor();  // delete
 
     const start = performance.now();
     status = await this._model.compute(this._inputTensor, this._outputTensor);
-
-    if (this._currentModelInfo.isDNNL) {
-      let rawModel = this._rawModel;
-      console.log(rawModel);
-      let outputF32 = Array.from(this._outputTensor[0]);
-
-      if (rawModel[rawModel.length - 1].operator == "Softmax") {
-        /*
-        // Output value: int8 -> f32
-        let lastNode = rawModel[rawModel.length - 2];
-        let outputScale = Float32Array.from(lastNode.input[2]["Y_scales"]["value"]);
-        console.log(outputScale);
-
-        let outputF32 = [];
-        for (let i = 0; i < outputScale.length; i++) {
-          outputF32.push(output[i] / outputScale[i]);
-        }
-        console.log(outputF32);
-        */
-        // Skip Softmax and realized by function
-        let outputTmp = [];
-        let expSum = 0;
-        let maxNum = 0;
-
-        for (let i = 0; i < outputF32.length; i++) {
-          maxNum = Math.max(maxNum, outputF32[i]);
-        }
-
-        for (let i = 0; i < outputF32.length; i++) {
-          expSum = expSum + Math.exp((outputF32[i] - maxNum));
-        }
-
-        for (let i = 0; i < outputF32.length; i++) {
-          let tmpNum = (Math.exp(outputF32[i] - maxNum) / expSum).toFixed(4);
-          outputTmp.push(tmpNum);
-        }
-
-        for (let i = 0; i < outputTmp.length; i++) {
-          if (outputTmp[i] != 0) console.log(i + ": " + outputTmp[i]);
-        }
-
-        this._outputTensor = [new Float32Array(outputTmp)];
-      }
-    }
-
-    console.log(this._outputTensor);
 
     const delta = performance.now() - start;
     this._setInferenceTime(delta);

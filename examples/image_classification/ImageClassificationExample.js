@@ -15,6 +15,17 @@ class ImageClassificationExample extends BaseCameraExample {
     return runner;
   };
 
+  _predict = async () => {
+    const drawOptions = {
+      inputSize: this._currentModelInfo.inputSize,
+      preOptions: this._currentModelInfo.preOptions,
+      imageChannels: 4,
+      isDNNL:this._currentModelInfo.isDNNL,
+    };
+    await this._runner.run(this._currentInputElement, drawOptions);
+    this._processOutput();
+  };
+
   _processCustomOutput = () => {
     const output = this._runner.getOutput();
     const deQuantizeParams =  this._runner.getDeQuantizeParams();

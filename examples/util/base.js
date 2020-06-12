@@ -237,24 +237,20 @@ const getTensorArray = (image, inputTensor, options, layout = 'NHWC') => {
     } else if (isDNNL) {
       let newWidth, newHeight;
       if (image.width > image.height) {
-        newWidth = rescaleSize;
-        newHeight = Math.floor(newWidth * image.width / image.height);
-      } else {
+        let scale = image.height / rescaleSize;
         newHeight = rescaleSize;
-        newWidth = Math.floor(newHeight * image.height / image.width);
+        newWidth = image.width / scale;
+      } else {
+        let scale = image.width / rescaleSize;
+        newWidth = rescaleSize;
+        newHeight = image.height / scale;
       }
 
-      let sideWidth = Math.abs(Math.floor((newWidth - width) / 2));
-      let sideHeight = Math.abs(Math.floor((newHeight - height) / 2));
+      let sideWidth = Math.floor((newWidth - width) / 2);
+      let sideHeight = Math.floor((newHeight - height) / 2);
       let startX = 0 - sideWidth;
       let startY = 0 - sideHeight;
       canvasContext.drawImage(image, startX, startY, newWidth, newHeight);
-      /*
-      let myCanvas = document.getElementById("myCanvas");
-      let cxt = myCanvas.getContext("2d");
-      cxt.drawImage(image, startX, startY, newWidth, newHeight);
-      throw new Error("----mark----");
-      */
     } else {
       canvasContext.drawImage(image, 0, 0, width, height);
     }
@@ -324,19 +320,6 @@ const getTensorArray = (image, inputTensor, options, layout = 'NHWC') => {
     }
   } else {
     throw new Error(`Unsupport '${channelScheme}' Layout`);
-  }
-
-  if (isDNNL) {
-    let tensorTmp = Float32Array.from(tensor);
-    let scale = 0.007874015718698502;
-    for (let h = 0; h < height; ++h) {
-      for (let w = 0; w < width; ++w) {
-        for (let c = 0; c < channels; ++c) {
-          let value = tensorTmp[h * width * imageChannels + w * imageChannels + c];
-          tensor[h * width * channels + w * channels + c] = value / mean[c] / scale;
-        }
-      }
-    }
   }
 };
 

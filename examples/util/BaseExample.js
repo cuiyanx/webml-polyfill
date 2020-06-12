@@ -400,7 +400,6 @@ class BaseExample extends BaseApp {
       inputSize: this._currentModelInfo.inputSize,
       preOptions: this._currentModelInfo.preOptions,
       imageChannels: 4,
-      isDNNL:this._currentModelInfo.isDNNL,
     };
     await this._runner.run(this._currentInputElement, drawOptions);
     this._processOutput();

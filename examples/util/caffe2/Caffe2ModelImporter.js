@@ -105,6 +105,10 @@ class Caffe2ModelImporter {
     return index;
   }
 
+  _addTensorInt32 (dime, value) {
+    return this._addOperand({type: this._nn.TENSOR_INT32, dimensions: dime}, new Int32Array(value));
+  }
+
   _addArgInt32 (value) {
     return this._addOperand({type: this._nn.INT32}, new Int32Array(value));
   }
@@ -722,8 +726,50 @@ class Caffe2ModelImporter {
           let inputType = this._getTensorTypeByName(inputName);
           let inputDime = inputType.dimensions;
           let inputTypeCode = inputType.type;
-          let inputPoint = inputType.zeroPoint || 0;
-          let inputScales = inputType.scale || 1;
+
+          // 4D -> 2D for DNNL, axis = 0
+          if (this._isDNNL && inputDime.length == 4 ) {
+            if (inputDime.reduce((a, b) => a * b) == inputDime[3]) {
+              console.log("  Add reshape op for dnnl");
+              console.log(`layer${nodeIdx}: reshape`);
+
+              // Input
+              let reshapeInputName = inputName;
+              let reshapeDime = [1, inputDime[3]];
+              let reshapeInputTypeCode = inputTypeCode;
+              console.log(`  input shape: [${inputDime}]`);
+
+              inputs.push(this._getTensorIdByName(reshapeInputName));
+              inputs.push(this._addTensorInt32([2], reshapeDime));
+
+              // Output
+              let reshapeOutputName = "reshape_" + reshapeInputName;
+              let reshapeOutputType = {
+                type: reshapeInputTypeCode,
+                dimensions: reshapeDime
+              };
+
+              let reshapeOutputID = this._addTensor(reshapeOutputName, reshapeOutputType);
+              outputs.push(reshapeOutputID);
+              console.log(`  output type: [${reshapeDime}]`);
+
+              // Add operation
+              opCode = this._nn.RESHAPE;
+
+              this._addOperation(opCode, inputs, outputs);
+
+              // Reset
+              nodeIdx++;
+              inputs = [];
+              outputs = [];
+              inputName = reshapeOutputName;
+              inputType = reshapeOutputType;
+              inputDime = reshapeOutputType.dimensions;
+              inputTypeCode = reshapeOutputType.type;
+              console.log(`layer${nodeIdx}: ${node.operator} (${node.name})`);
+            }
+          }
+
           console.log(`  input shape: [${inputDime}]`);
 
           // Beta
@@ -732,35 +778,16 @@ class Caffe2ModelImporter {
 
           inputs.push(this._getTensorIdByName(inputName));
           inputs.push(this._addArgFloat32([beta]));
-          //inputs.push(this._addArgInt32([axis]));
 
           // Add outputs
           let outputTensor = node.output[0];
           let outputName = this._getAttributeName(outputTensor);
           let outputTypeCode = inputTypeCode;
           let outputDims = inputDime;
-          let outputType = [];
-          if (this._isQuantized) {
-            let outputScales = 0.00390625;  // 1.f/256
-            if (args.hasOwnProperty("Y_scale")) {
-              outputScales = this._getAttributeValue(args, "Y_scale");
-            }
-            let outputPoint = this._isDNNL ? -128 : 0;
-            if (args.hasOwnProperty("Y_zero_point")) {
-              outputPoint = this._getAttributeValue(args, "Y_zero_point");
-            }
-            outputType = {
-              type: outputTypeCode,
-              dimensions: outputDims,
-              scale: outputScales,
-              zeroPoint: outputPoint
-            };
-          } else {
-            outputType = {
-              type: outputTypeCode,
-              dimensions: outputDims
-            };
-          }
+          let outputType = {
+            type: outputTypeCode,
+            dimensions: outputDims
+          };
 
           let outputID = this._addTensor(outputName, outputType);
           outputs.push(outputID);
