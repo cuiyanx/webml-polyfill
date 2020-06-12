@@ -249,12 +249,10 @@ const getTensorArray = (image, inputTensor, options, layout = 'NHWC') => {
       let startX = 0 - sideWidth;
       let startY = 0 - sideHeight;
       canvasContext.drawImage(image, startX, startY, newWidth, newHeight);
-      /*
       let myCanvas = document.getElementById("myCanvas");
       let cxt = myCanvas.getContext("2d");
       cxt.drawImage(image, startX, startY, newWidth, newHeight);
       throw new Error("----mark----");
-      */
     } else {
       canvasContext.drawImage(image, 0, 0, width, height);
     }
